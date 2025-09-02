@@ -1,2 +1,169 @@
 pipeline {
+
+  agent { label 'testNode'}
+
+  options {
+     timestamps()
+  }
+
+  triggers {
+     pollscm('* * * * *')
+  }
+
+  stages {
+
+    stage('Checkout code') {
+       steps {
+         dir('/home/ubuntu') 
+            {
+              git branch: 'main',            
+                 credentialsId: 'git',               
+                 url: 'https://github.com/nilnav2020/assignment.git'
+            }
+          } 
+        }
+   
+    stage('Semgrep scan') {
+      steps {
+         script {
+            sh 'docker pull returntocorp/semgrep-agent:v1'
+        }
+
+        // Frontend scan
+        dir('/home/ubuntu/full-stack_chatApp/frontend') {
+            script {
+                sh """
+                    docker run --rm \
+                        -v \$(pwd):/src \
+                        --workdir /src \
+                        returntocorp/semgrep-agent:v1 semgrep-agent \
+                        --config p/ci --config p/security-audit --config p/secrets \
+                        --json > fe_report.json || true
+                """
+
+                // Count only "ERROR" findings
+                sh """
+                    CRITICALS=\$(jq '[.results[] | select(.extra.severity=="ERROR")] | length' fe_report.json)
+                    echo "Frontend ERROR findings: \$CRITICALS"
+                    if [ "\$CRITICALS" -gt 25 ]; then
+                        echo "❌ Too many critical issues in frontend (\$CRITICALS > 25)"
+                        exit 1
+                    fi
+                """
+            }
+        }
+
+        // Backend scan
+        dir('/home/ubuntu/full-stack_chatApp/backend') {
+            script {
+                sh """
+                    docker run --rm \
+                        -v \$(pwd):/src \
+                        --workdir /src \
+                        returntocorp/semgrep-agent:v1 semgrep-agent \
+                        --config p/ci --config p/security-audit --config p/secrets \
+                        --json > be_report.json || true
+                """
+
+                // Count only "ERROR" findings
+                sh """
+                    CRITICALS=\$(jq '[.results[] | select(.extra.severity=="ERROR")] | length' be_report.json)
+                    echo "Backend ERROR findings: \$CRITICALS"
+                    if [ "\$CRITICALS" -gt 25 ]; then
+                        echo "❌ Too many critical issues in backend (\$CRITICALS > 25)"
+                        exit 1
+                    fi
+                """
+                    }
+                 }
+              } 
+          }
+
+
+     stage('Build images') {
+       steps {
+          script {
+                       // Authenticate to GHCR
+               withCredentials([usernamePassword(credentialsId: 'ghcr-creds', usernameVariable: 'USERNAME', passwordVariable: 'TOKEN')]) {
+               sh "echo $TOKEN | docker login ghcr.io -u $USERNAME --password-stdin"
+               }
+
+               def feTag = "ghcr.io/nilnav2020/chatapp_fe:${env.BUILD_NUMBER}"
+               def beTag = "ghcr.io/nilnav2020/chatapp_be:${env.BUILD_NUMBER}"
+
+                     // ---- Frontend ----
+               dir('/home/ubuntu/full-stack_chatApp/frontend') {
+                  sh "docker build . -t ${feTag}"
+                  sh "docker push ${feTag}"
+                 }
+
+                   // ---- Backend ----
+               dir('/home/ubuntu/full-stack_chatApp/backend') {
+                  sh "docker build . -t ${beTag}"
+                  sh "docker push ${beTag}"
+                 }
+               }
+             }
+          }
+
+
+   
+      stage('Trivy Image Scan') {
+        steps {
+          script {
+            sh 'docker pull aquasec/trivy:latest'
+            sh 'mkdir -p /home/ubuntu/reports'
+
+                       // ---- Frontend image scan ----
+            def feTag = "ghcr.io/nilnav2020/chatapp_fe:${env.BUILD_NUMBER}"
+            sh """
+                docker run --rm \
+                    -v /var/run/docker.sock:/var/run/docker.sock \
+                    -v /home/ubuntu/reports:/reports \
+                    aquasec/trivy:latest image \
+                    --severity CRITICAL \
+                    --format json \
+                    --output /reports/fe_trivy.json \
+                    ${feTag} || true
+            """
+
+            def feCriticals = sh(
+                script: "jq '[.Results[].Vulnerabilities[]? | select(.Severity==\"CRITICAL\")] | length' /home/ubuntu/reports/fe_trivy.json",
+                returnStdout: true
+            ).trim().toInteger()
+
+            echo "Frontend CRITICAL vulnerabilities: ${feCriticals}"
+            if (feCriticals > 25) {
+                error("❌ Too many CRITICAL vulns in frontend (${feCriticals} > 25)")
+            }
+
+                       // ---- Backend image scan ----
+            def beTag = "ghcr.io/nilnav2020/chatapp_be:${env.BUILD_NUMBER}"
+            sh """
+                docker run --rm \
+                    -v /var/run/docker.sock:/var/run/docker.sock \
+                    -v /home/ubuntu/reports:/reports \
+                    aquasec/trivy:latest image \
+                    --severity CRITICAL \
+                    --format json \
+                    --output /reports/be_trivy.json \
+                    ${beTag} || true
+            """
+
+            def beCriticals = sh(
+                script: "jq '[.Results[].Vulnerabilities[]? | select(.Severity==\"CRITICAL\")] | length' /home/ubuntu/reports/be_trivy.json",
+                returnStdout: true
+            ).trim().toInteger()
+
+            echo "Backend CRITICAL vulnerabilities: ${beCriticals}"
+            if (beCriticals > 25) {
+                error("❌ Too many CRITICAL vulns in backend (${beCriticals} > 25)")
+            }
+          }
+        }
+      }
+
+
+
+}
 }
