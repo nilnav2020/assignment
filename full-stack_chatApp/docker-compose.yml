@@ -13,7 +13,7 @@ services:
       - fullstack-chatapp
 
   backend:
-    image: be:v2
+    image: ghcr.io/nilnav2020/chatapp_be:v2
     container_name: full-stack_backend
     environment:
       - NODE_ENV=production
@@ -26,7 +26,7 @@ services:
       - fullstack-chatapp
 
   frontend:
-    image: fe:v2
+    image: ghcr.io/nilnav2020/chatapp_fe:v2
     container_name: full-stack_frontend
     ports:
       - "80:80"
