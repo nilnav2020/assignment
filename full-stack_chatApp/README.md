@@ -111,19 +111,20 @@ Deploy application:
 kubectl apply -R -f k8s/
 ```
 
-**CI/CD Pipeline (Jenkins)**
+## CI/CD Pipeline (Jenkins)
 
 **configure Jenkins server**
 
-__Configure IAM role for Jenkins EC2 to allow__
+Configure IAM role for Jenkins EC2 to allow
 1. eks:DescribeCluster
 2. eks:UpdateClusterConfig
 3. sts:AssumeRole
-__Configure Jenkins credentials__
 
+Configure Jenkins credentials
 1. Git credentials (git)
 2. GitHub Container Registry credentials (ghcr-creds)
 
+Implement the pipeline via Jenkinsfile
 Stages:
 1. **Checkout Code**
 2. **Semgrep SAST (static analysis)**
@@ -134,6 +135,7 @@ Stages:
 7. **Kyverno Policy Deployment**
 8. **Kubernetes Deployment → EKS**
 9. **Rollout Verification**
+
 
 
 
