@@ -1,28 +1,19 @@
 ## 📝 Introduction:
 
-This project aims to provide a real-time chat experience that's both scalable and secure. With a focus on modern technologies, we're building an application that's easy to use and maintain.
+This project implements a secure, real-time chat application with a DevSecOps workflow.
+It demonstrates how to integrate security controls across the application, infrastructure, and CI/CD pipeline.
 
+. **Frontend**: React + TailwindCSS
 
-## Detailed Workflow Description:
+. **Backend**: Node.js + Express + MongoDB + Socket.io
 
+. **Infra**: Kubernetes (EKS)
 
-![image](https://github.com/user-attachments/assets/f845a188-8e70-42f7-8577-30af38e83053)
+. **Security**: Semgrep (SAST), Trivy (Image + SCA), Kyverno (K8s policies), Checkov (IaC scanning) - for s3 bucket
 
+. **CI/CD**: Jenkins pipeline with automated build, scan, and deploy
 
-  - **User Interaction:**
-    - Users interact with the frontend application running in their browser. This includes actions like logging in, sending messages, and navigating through the chat interface.Frontend (React App):The frontend is responsible for rendering the user interface and handling user inputs.It communicates with the backend via HTTP requests (for RESTful APIs) and WebSocket connections (for real-time interactions).
-
-    - **Backend (Node.js/Express + Socket.io):**
-       - The backend handles all the server-side logic.It processes API requests from the frontend to perform actions such as user authentication, message retrieval, and message storage.Socket.io is used to manage real-time bi-directional communication between the frontend and the backend. This allows for instant messaging features, such as showing when users are typing or when new messages are sent.
-
-
-    - **MongoDB (Database):**
-       - MongoDB stores all persistent data for the application, including user profiles, chat messages, and any other relevant data.The backend interacts with MongoDB to retrieve, add, update, or delete data based on the requests it receives from the frontend.
-
-
-
-
-## ✨ Features:
+## ✨ Application Features:
 
 
 * **Real-time Messaging**: Send and receive messages instantly using Socket.io 
@@ -39,51 +30,58 @@ This project aims to provide a real-time chat experience that's both scalable an
 * **Backend:** Node.js, Express, MongoDB, Socket.io
 * **Frontend:** React, TailwindCSS
 * **Containerization:** Docker
-* **Orchestration:** Kubernetes (planned)
+* **Orchestration:** Kubernetes and docker compose
 * **Web Server:** Nginx
 * **State Management:** Zustand
 * **Authentication:** JWT
 * **Styling Components:** DaisyUI
 
 
-## 🔧 Prerequisites:
-
-
-* **[Node.js](https://nodejs.org/)** (v14 or higher)
-* **[Docker](https://www.docker.com/get-started)** (for containerizing the app)
-* **[Git](https://git-scm.com/downloads)** (to clone the repository)
-
-
-## 📝 Setup .env File:
-
-
-1. Navigate to the `backend` directory:
+## Repository Structure
 ```bash
-cd backend
+.
+├── backend/                 # Node.js backend source code
+├── frontend/                # React frontend source code
+├── docker-compose.yml       # for easier stack overall reference
+├── k8s/                     # Kubernetes manifests (fe, be, db)
+  ├── be
+  │   ├── be-dep.yaml
+  │   └── be-svc.yaml
+  ├── db
+  │   ├── db-dep.yaml
+  │   ├── db-gp3.yaml
+  │   ├── db-pvc.yml
+  │   └── db-svc.yaml
+  └── fe
+      ├── fe-dep.yaml
+      └── fe-svc.yaml
+├── eso/                     # External Secrets Operator manifests
+├── kyverno/                 # Kyverno policies (restrict privileged pods, enforce resource limits)
+├── terraform/               # Terraform IaC (S3 bucket + encryption)
+│   ├── main.tf
+│   ├── provider.tf
+│   ├── variables.tf
+│   ├── outputs.tf
+│   └── terraform.tfvars
+├── Jenkinsfile              # CI/CD pipeline definition
+├── Security-Report.pdf      # Compliance & Security report
+└── README.md                
 ```
-2. Create a `.env` file and add the following content (modify the values as needed):
-```env
-MONGODB_URI=mongodb://mongoadmin:secret@mongodb:27017/dbname?authSource=admin
-JWT_SECRET=your_jwt_secret_key
-PORT=5001
-```
-> **Note:** Replace `your_jwt_secret_key` with a strong secret key of your choice.
 
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/iemafzalhassan/full-stack_chatApp.git
+git clone https://github.com/nilnav2020/assignment.git
 ```
 
 ## 🏗️ Build and Run the Application"
 
 Follow these steps to build and run the application:
 
-1. Build & Run the Containers:
-
 ```bash
 cd full-stack_chatApp
 ```
+**internal deployments**
 ```bash
 docker-compose up -d --build
 ```
@@ -93,131 +91,46 @@ docker-compose up -d --build
 ```
 http://localhost
 ```
----
+You can now interact with the real-time chat app and start messaging.
 
-## 🛠️ Getting Started
+**Kubernetes Deployment (EKS)**
 
-Follow these simple steps to get the project up and running on your local Host using docker.
+Update kubeconfig:
 
+aws eks update-kubeconfig --name chat-app-cluster --region us-east-1
+
+
+Apply External Secrets + Kyverno:
 ```bash
-git clone https://github.com/iemafzalhassan/full-stack_chatApp.git
+kubectl apply -f eso/
+kubectl apply -f kyverno/
 ```
 
+Deploy application:
 ```bash
-cd full-stack_chatApp
-```
-## Create a Docker network:
-
-```bash
-docker network create full-stack
+kubectl apply -R -f k8s/
 ```
 
-## 🛠️ Building the Frontend
+**CI/CD Pipeline (Jenkins)**
 
-```bash
-cd frontend
-```
+**configure Jenkins server**
+_Configure IAM role for Jenkins EC2 to allow:_
+1. eks:DescribeCluster
+2. eks:UpdateClusterConfig
+3. sts:AssumeRole
+_Configure Jenkins credentials:_
+1. Git credentials (git)
+2. GitHub Container Registry credentials (ghcr-creds)
 
-```bash
-docker build -t full-stack_frontend .
-```
-
-### Run the Frontend container:
-
-```bash
-docker run -d --network=full-stack  -p 5173:5173 --name frontend full-stack_frontend:latest
-```
-#### The frontend will now be accessible on port 5173.
-
-
-### Run the MongoDB Container:
-
-```bash
-docker run -d -p 27017:27017 --name mongo mongo:latest
-```
----
-
-## 🛠️ Building the Backend
-
-```bash
-cd backend
-```
-
-### Build the Backend image:
-
-```bash
-docker build -t full-stack_backend .
-```
-
-### Run the Backend container:
-
-```bash
-docker run -d --network=full-stack --add-host=host.docker.internal:host-gateway -p 5001:5001 --env-file .env full-stack_backend
-
-```
-#### This will build and run the backend container, exposing the backendAPI on port 5001.
-
-`Backend API: http://localhost:5001`
-
-### To Verify the conncetion between backend and databse:
-```bash
-docker-compose logs -f
-```
-
-### Once the backend and frontend containers are running, you can access the application in your browser:
-
-`Frontend: http://localhost`
+Stages:
+1. **Checkout Code**
+2. **Semgrep SAST (static analysis)**
+3. **Unit Tests (frontend + backend)**
+4. **Build & Push Docker Images → GHCR**
+5. **Trivy Image Scanning (fail if CRITICAL > 25)**
+6. **Trivy FS SCA (frontend + backend dependency scanning)**
+7. **Kyverno Policy Deployment**
+8. **Kubernetes Deployment → EKS**
+9. **Rollout Verification**
 
 
-You can now interact with the real-time chat app and start messaging!
-
----
-
-
-
-### 🤝 Contributing
-
-
-We welcome contributions from DevOps & Developer of all skill levels! Here's how you can contribute:
-
-**Report bugs:** If you encounter any bugs or issues, please open an issue with detailed information.
-**Suggest features:** Have an idea for a new feature? Open an issue to discuss it with the community.
-**Submit pull requests:** If you have a fix or a feature you'd like to contribute, submit a pull request. Ensure your changes pass any linting or tests, if applicable.
-
-### 🌐 Join the Community
-
-We invite you to join our community of developers and contributors. Let's work together to build an amazing real-time chat application!
-
-* **Star this repository** to show your support
-* **Fork this repository** to contribute to the project
-* **Open an issue** to report bugs or suggest features
-* **Submit a pull request** to contribute code changes
-
-## 🔮 Future Plans
-
-
-This project is evolving, and here are a few exciting things on the horizon:
-
-* [ ] **CI/CD Pipelines:** Implement Continuous Integration and Continuous Deployment pipelines to automate testing and deployment.
-* [ ] **Kubernetes (K8s):** Add Kubernetes manifests for container orchestration to deploy the app on cloud platforms like AWS, GCP, or Azure.
-* [ ] **Feature Expansion:** Add more features like group chats, media sharing, and user status updates.
-* **Stay tuned for updates as we continue to improve and expand this project!**
-
----
-
-## 📚 Project Snapshots:
-
-![Settings](frontend/public/settings.png)
-
-![chat](frontend/public/chat.png)
-
-![logout](/frontend/public/logout.png)
-
-![Login](/frontend/public/login.png)
-
-
-
-## 📜 License
-
-
-This project is licensed under the MIT License. See the LICENSE file for more details.
