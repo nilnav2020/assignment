@@ -78,7 +78,75 @@ pipeline {
                  }
               } 
           }
+     
+     stage('Unit Tests') {
+       steps {
+         dir('/home/ubuntu/full-stack_chatApp/backend') {
+          sh 'npm ci --omit=dev=false && npm test || true'
+          }
+         dir('/home/ubuntu/full-stack_chatApp/frontend') {
+         sh 'npm ci --omit=dev=false && npm test || true'
+          }
+        }
+      }
+    
 
+        stage('Trivy SCA Scan') {
+           steps {
+             script {
+                sh 'docker pull aquasec/trivy:latest'
+                sh 'mkdir -p /home/ubuntu/reports'
+
+                        // ---- Frontend SCA scan ----
+                dir('/home/ubuntu/full-stack_chatApp/frontend') {
+                sh """
+                   docker run --rm \
+                   -v \$(pwd):/src \
+                   -v /home/ubuntu/reports:/reports \
+                   aquasec/trivy:latest fs /src \
+                   --severity CRITICAL \
+                   --format json \
+                   --output /reports/fe_sca.json || true
+                """
+
+               def feCriticals = sh(
+               script: "jq '[.Results[].Vulnerabilities[]? | select(.Severity==\"CRITICAL\")] | length' /home/ubuntu/reports/fe_sca.json",
+               returnStdout: true
+               ).trim().toInteger()
+
+               echo "Frontend SCA CRITICAL vulnerabilities: ${feCriticals}"
+               if (feCriticals > 25) {
+               error("❌ Too many CRITICAL vulns in frontend dependencies (${feCriticals} > 25)")
+               }
+              }
+
+                       // ---- Backend SCA scan ----
+             dir('/home/ubuntu/full-stack_chatApp/backend') {
+             sh """
+                docker run --rm \
+                -v \$(pwd):/src \
+                -v /home/ubuntu/reports:/reports \
+                aquasec/trivy:latest fs /src \
+                --severity CRITICAL \
+                --format json \
+                --output /reports/be_sca.json || true
+             """
+
+            def beCriticals = sh(
+              script: "jq '[.Results[].Vulnerabilities[]? | select(.Severity==\"CRITICAL\")] | length' /home/ubuntu/reports/be_sca.json",
+              returnStdout: true
+            ).trim().toInteger()
+
+            echo "Backend SCA CRITICAL vulnerabilities: ${beCriticals}"
+            if (beCriticals > 25) {
+              error("❌ Too many CRITICAL vulns in backend dependencies (${beCriticals} > 25)")
+            }
+          }
+        }
+      }
+    }
+
+    
 
      stage('Build images') {
        steps {
@@ -160,6 +228,56 @@ pipeline {
                 error("❌ Too many CRITICAL vulns in backend (${beCriticals} > 25)")
             }
           }
+        }
+      }
+
+     stage('Applying kyVERNO Policies') {
+        steps {
+         sh '''
+         # here we assume jenkins running on ec2 has appropriate IAM roles and policies + aws cli , kubectl installed 
+         aws eks update-kubeconfig --name chat-app-cluster --region us-east-1
+         
+         #  "Installing Kyverno via Helm"
+         helm repo add kyverno https://kyverno.github.io/kyverno/
+         helm repo update
+
+         # Install kyverno into kyverno namespace
+         helm upgrade --install kyverno kyverno/kyverno \
+         --namespace kyverno \
+         --create-namespace
+         
+         #  Waiting for Kyverno pods to be ready
+         kubectl rollout status deployment kyverno -n kyverno --timeout=120s
+
+         # Deploy kyverno policies
+         kubectl apply -f kyverno/
+          '''
+           }
+         }
+
+
+    
+     stage('Deploy to EKS') {
+        steps {
+         sh '''
+         # here we assume jenkins running on ec2 has appropriate IAM roles and policies + kubectl and AWS cli intalled and configured
+         aws eks update-kubeconfig --name chat-app-cluster --region us-east-1
+
+         # Deploy manifests
+          kubectl apply -f eso/
+          kubectl apply -R -f k8s/
+
+          # Roll out new images dynamically
+          FE_IMG="ghcr.io/nilnav2020/chatapp_fe:${BUILD_NUMBER}"
+          BE_IMG="ghcr.io/nilnav2020/chatapp_be:${BUILD_NUMBER}"
+
+          kubectl set image deploy/frontend frontend=$FE_IMG
+          kubectl set image deploy/backend backend=$BE_IMG
+
+          kubectl rollout status deploy/frontend --timeout=180s
+          kubectl rollout status deploy/backend --timeout=180s
+
+         '''
         }
       }
 

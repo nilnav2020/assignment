@@ -1,0 +1,16 @@
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: fullstack-chatapp-secrets
+  namespace: default
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets-store
+    kind: SecretStore
+  target:
+    name: fullstack-chatapp-k8s-secrets
+    creationPolicy: Owner
+  dataFrom:
+    - extract:
+        key: fullstack-chatapp

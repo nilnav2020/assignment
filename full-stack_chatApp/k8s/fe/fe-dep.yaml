@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: frontend
+          image: ghcr.io/nilnav2020/chatapp_fe:v2
+          ports:
+            - containerPort: 80
+          securityContext:
+             runAsNonRoot: true
+             runAsUser: 1000
+             runAsGroup: 1000
+             allowPrivilegeEscalation: false
+             capabilities:
+                drop: ["ALL"]

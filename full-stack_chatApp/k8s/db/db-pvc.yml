@@ -1,11 +1,12 @@
+# 4-pv-pvc.yaml
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: mongodb-pvc
-  namespace: chat-app
+  name: mongo-pvc
 spec:
   accessModes:
     - ReadWriteOnce
+  storageClassName: db-gp3 
   resources:
     requests:
-      storage: 5Gi
+      storage: 25Gi
