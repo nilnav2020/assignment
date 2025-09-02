@@ -74,7 +74,7 @@ It demonstrates how to integrate security controls across the application, infra
 git clone https://github.com/nilnav2020/assignment.git
 ```
 
-## 🏗️ Build and Run the Application"
+## Build and Run the Application
 
 Follow these steps to build and run the application:
 
@@ -132,5 +132,6 @@ Stages:
 7. **Kyverno Policy Deployment**
 8. **Kubernetes Deployment → EKS**
 9. **Rollout Verification**
+
 
 
