@@ -14,7 +14,8 @@ spec:
     spec:
       containers:
         - name: backend
-          image: chatapp_be:latest
+          image: chatapp_be:${BUILD_NUMBER}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5001
           envFrom:
