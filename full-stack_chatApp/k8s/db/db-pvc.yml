@@ -1,4 +1,15 @@
-# 4-pv-pvc.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongo-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /tmp/mongo-data
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -6,7 +17,6 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: db-gp3 
   resources:
     requests:
-      storage: 25Gi
+      storage: 1Gi
