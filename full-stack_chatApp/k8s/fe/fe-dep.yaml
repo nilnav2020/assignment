@@ -14,14 +14,14 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: chatapp_fe:${BUILD_NUMBER}  
+          image: chatapp_fe:${BUILD_NUMBER}
           imagePullPolicy: IfNotPresent
-          ports:
+          ports
             - containerPort: 80
           securityContext:
-             runAsNonRoot: true
-             runAsUser: 1000
-             runAsGroup: 1000
-             allowPrivilegeEscalation: false
-             capabilities:
-                drop: ["ALL"]
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
