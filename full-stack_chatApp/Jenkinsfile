@@ -1,13 +1,13 @@
 pipeline {
 
-  agent { label 'testNode'}
+  agent any
 
   options {
      timestamps()
   }
 
   triggers {
-     pollscm('* * * * *')
+     pollSCM('* * * * *')
   }
 
   stages {
@@ -17,7 +17,6 @@ pipeline {
          dir('/home/ubuntu') 
             {
               git branch: 'main',            
-                 credentialsId: 'git',               
                  url: 'https://github.com/nilnav2020/assignment.git'
             }
           } 
@@ -146,33 +145,26 @@ pipeline {
       }
     }
 
-    
+    stage('Build images') {
+    steps {
+        script {
+            def feTag = "chatapp_fe:${env.BUILD_NUMBER}"
+            def beTag = "chatapp_be:${env.BUILD_NUMBER}"
 
-     stage('Build images') {
-       steps {
-          script {
-                       // Authenticate to GHCR
-               withCredentials([usernamePassword(credentialsId: 'ghcr-creds', usernameVariable: 'USERNAME', passwordVariable: 'TOKEN')]) {
-               sh "echo $TOKEN | docker login ghcr.io -u $USERNAME --password-stdin"
-               }
+            // ---- Frontend ----
+            dir('/home/ubuntu/full-stack_chatApp/frontend') {
+                sh "docker build . -t ${feTag}"
+            }
 
-               def feTag = "ghcr.io/nilnav2020/chatapp_fe:${env.BUILD_NUMBER}"
-               def beTag = "ghcr.io/nilnav2020/chatapp_be:${env.BUILD_NUMBER}"
+            // ---- Backend ----
+            dir('/home/ubuntu/full-stack_chatApp/backend') {
+                sh "docker build . -t ${beTag}"
+            }
 
-                     // ---- Frontend ----
-               dir('/home/ubuntu/full-stack_chatApp/frontend') {
-                  sh "docker build . -t ${feTag}"
-                  sh "docker push ${feTag}"
-                 }
-
-                   // ---- Backend ----
-               dir('/home/ubuntu/full-stack_chatApp/backend') {
-                  sh "docker build . -t ${beTag}"
-                  sh "docker push ${beTag}"
-                 }
-               }
-             }
-          }
+            echo "✅ Built local Docker images: ${feTag}, ${beTag}"
+        }
+    }
+}
 
 
    
@@ -183,7 +175,7 @@ pipeline {
             sh 'mkdir -p /home/ubuntu/reports'
 
                        // ---- Frontend image scan ----
-            def feTag = "ghcr.io/nilnav2020/chatapp_fe:${env.BUILD_NUMBER}"
+            def feTag = "chatapp_fe:${env.BUILD_NUMBER}"
             sh """
                 docker run --rm \
                     -v /var/run/docker.sock:/var/run/docker.sock \
@@ -206,7 +198,7 @@ pipeline {
             }
 
                        // ---- Backend image scan ----
-            def beTag = "ghcr.io/nilnav2020/chatapp_be:${env.BUILD_NUMBER}"
+            def beTag = "chatapp_be:${env.BUILD_NUMBER}"
             sh """
                 docker run --rm \
                     -v /var/run/docker.sock:/var/run/docker.sock \
@@ -231,55 +223,103 @@ pipeline {
         }
       }
 
-     stage('Applying kyVERNO Policies') {
-        steps {
-         sh '''
-         # here we assume jenkins running on ec2 has appropriate IAM roles and policies + aws cli , kubectl installed 
-         aws eks update-kubeconfig --name chat-app-cluster --region us-east-1
-         
-         #  "Installing Kyverno via Helm"
-         helm repo add kyverno https://kyverno.github.io/kyverno/
-         helm repo update
 
-         # Install kyverno into kyverno namespace
-         helm upgrade --install kyverno kyverno/kyverno \
-         --namespace kyverno \
-         --create-namespace
-         
-         #  Waiting for Kyverno pods to be ready
-         kubectl rollout status deployment kyverno -n kyverno --timeout=120s
+stage('Install Kind') {
+    steps {
+        sh '''
+        echo "Granting passwordless sudo rights to jenkins user..."
+        # Create a sudoers file for jenkins
+        echo "jenkins ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/jenkins
+        sudo -n chmod 440 /etc/sudoers.d/jenkins
 
-         # Deploy kyverno policies
-         kubectl apply -f kyverno/
-          '''
-           }
-         }
+        echo "Installing Kind..."
+        curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64
+        chmod +x ./kind
+        sudo -n mv ./kind /usr/local/bin/kind
+
+        kind --version
+        '''
+    }
+}
 
 
-    
-     stage('Deploy to EKS') {
-        steps {
-         sh '''
-         # here we assume jenkins running on ec2 has appropriate IAM roles and policies + kubectl and AWS cli intalled and configured
-         aws eks update-kubeconfig --name chat-app-cluster --region us-east-1
 
-         # Deploy manifests
-          kubectl apply -f eso/
-          kubectl apply -R -f k8s/
+stage('Create Kind Cluster') {
+  steps {
+    sh '''
+    echo "Creating Kind cluster..."
+    kind create cluster --name chatapp || true
+    '''
+  }
+}
 
-          # Roll out new images dynamically
-          FE_IMG="ghcr.io/nilnav2020/chatapp_fe:${BUILD_NUMBER}"
-          BE_IMG="ghcr.io/nilnav2020/chatapp_be:${BUILD_NUMBER}"
+stage('Install kubectl') {
+    steps {
+        sh '''
+        echo "Installing kubectl..."
+        KUBECTL_VERSION=$(curl -L -s https://dl.k8s.io/release/stable.txt)
+        curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+        chmod +x kubectl
+        sudo mv kubectl /usr/local/bin/
+        kubectl version --client
+        '''
+    }
+}
 
-          kubectl set image deploy/frontend frontend=$FE_IMG
-          kubectl set image deploy/backend backend=$BE_IMG
+stage('Applying kyVERNO Policies') {
+    steps {
+        dir('/home/ubuntu/full-stack_chatApp') {
+            sh '''
+            # Install Helm (simple method: download latest release)
+            curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
-          kubectl rollout status deploy/frontend --timeout=180s
-          kubectl rollout status deploy/backend --timeout=180s
+            # Add Kyverno repo
+            helm repo add kyverno https://kyverno.github.io/kyverno/
+            helm repo update
 
-         '''
+            # Install Kyverno into kyverno namespace
+            helm upgrade --install kyverno kyverno/kyverno \
+              --namespace kyverno \
+              --create-namespace
+
+            # Wait for Kyverno pods to be ready
+            echo "⏳ Waiting 120s for Kyverno pods..."
+            sleep 120
+
+            # Apply local Kyverno policies from repo folder
+            kubectl apply -f kyverno/
+            '''
         }
-      }
+    }
+}
+
+
+
+stage('Deploy to Kind') {
+  steps {
+      dir('/home/ubuntu/full-stack_chatApp') {
+    sh '''
+    # Load images into Kind
+    kind load docker-image chatapp_fe:${BUILD_NUMBER} --name chatapp
+    kind load docker-image chatapp_be:${BUILD_NUMBER} --name chatapp
+
+    # Apply manifests
+    kubectl apply -R -f k8s/
+
+    # Update deployments with fresh tags
+    FE_IMG="chatapp_fe:${BUILD_NUMBER}"
+    BE_IMG="chatapp_be:${BUILD_NUMBER}"
+
+    kubectl set image deploy/frontend frontend=$FE_IMG
+    kubectl set image deploy/backend backend=$BE_IMG
+
+    kubectl rollout status deploy/frontend --timeout=180s
+    kubectl rollout status deploy/backend --timeout=180s
+    '''
+     }
+  }
+}
+
 
 
 
