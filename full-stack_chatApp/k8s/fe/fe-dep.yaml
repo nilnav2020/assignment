@@ -14,7 +14,8 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: chatapp_fe:latest
+          image: chatapp_fe:${BUILD_NUMBER}  
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
           securityContext:
