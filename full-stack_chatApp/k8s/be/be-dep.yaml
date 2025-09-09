@@ -12,11 +12,9 @@ spec:
       labels:
         app: backend
     spec:
-      imagePullSecrets:
-        - name: ghcr-secret
       containers:
         - name: backend
-          image: ghcr.io/nilnav2020/chatapp_be:v2
+          image: chatapp_be:latest
           ports:
             - containerPort: 5001
           envFrom:
