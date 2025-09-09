@@ -12,11 +12,9 @@ spec:
       labels:
         app: frontend
     spec:
-      imagePullSecrets:
-        - name: ghcr-secret
       containers:
         - name: frontend
-          image: ghcr.io/nilnav2020/chatapp_fe:v2
+          image: chatapp_fe:latest
           ports:
             - containerPort: 80
           securityContext:
