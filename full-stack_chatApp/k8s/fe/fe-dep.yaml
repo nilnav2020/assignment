@@ -16,7 +16,7 @@ spec:
         - name: frontend
           image: chatapp_fe:${BUILD_NUMBER}
           imagePullPolicy: IfNotPresent
-          ports
+          ports:
             - containerPort: 80
           securityContext:
             runAsNonRoot: true
